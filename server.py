@@ -1,5 +1,7 @@
-from flask import Flask, request, render_template, redirect
-import os
+from flask import Flask, request, render_template, redirect, make_response
+import base64
+
+app = Flask(__name__)
 
 def rot_n(text, n):
     return text.translate(str.maketrans(
@@ -7,43 +9,59 @@ def rot_n(text, n):
         "abcdefghijklmnopqrstuvwxyz"[n:] + "abcdefghijklmnopqrstuvwxyz"[:n]
     ))
 
-app = Flask(__name__)
+def encode_hex(text):
+    return text.encode('utf-8').hex()
 
-correct_value = rot_n("incognitoctf", 11)
+def encode_base64(text):
+    return base64.b64encode(text.encode()).decode()
+
+target = "incognitoctf"
+correct_value = rot_n(target, 23)
 
 @app.route('/')
 def index():
-    challenge_cookie = request.cookies.get("challenge")
-    print(f"Received Cookie: {challenge_cookie}")  # Debugging line
-    
+    challenge_cookie = request.cookies.get("admin")
+    print(f"Received Cookie: {challenge_cookie}")
+
+    if not challenge_cookie:
+        resp = make_response(render_template('index.html', message="Welcome agent."))
+        resp.set_cookie("admin", "none")
+        return resp
+
     if challenge_cookie == correct_value:
         return render_template('hidden.html', audio_file="/static/youshouldknowthis.mp3")
-    elif challenge_cookie == rot_n("incognitoctf", 1):
-        return render_template('rot1.html')
-    elif challenge_cookie == rot_n("incognitoctf", 2):
-        return render_template('rot2.html')
-    elif challenge_cookie == rot_n("incognitoctf", 3):
-        return render_template('rot3.html')
-    elif challenge_cookie == rot_n("incognitoctf", 4):
-        return render_template('rot4.html')
-    elif challenge_cookie == rot_n("incognitoctf", 5):
-        return render_template('rot5.html')
-    elif challenge_cookie == rot_n("incognitoctf", 6):
-        return render_template('rot6.html')
-    elif challenge_cookie == rot_n("incognitoctf", 7):
-        return render_template('rot7.html')
-    elif challenge_cookie == rot_n("incognitoctf", 8):
-        return render_template('rot8.html')
-    elif challenge_cookie == rot_n("incognitoctf", 9):
-        return render_template('rot9.html')
-    elif challenge_cookie == rot_n("incognitoctf", 10):
-        return render_template('rot10.html')
-    elif challenge_cookie == rot_n("incognitoctf", 12):
-        return render_template('rot12.html')
-    elif challenge_cookie == rot_n("incognitoctf", 13):
-        return render_template('rot13.html')
+
+    for i in range(1, 27):
+        if i == 11:
+            continue
+        if challenge_cookie == rot_n(target, i):
+            return render_template(f'rot{i}.html')
+
+    if challenge_cookie == encode_base64(target):
+        return render_template('rot_base64.html')
+
+    if challenge_cookie == encode_hex(target):
+        return render_template('rot_hex.html')
+
+    return render_template('index.html', message="Invalid cookie value! Check your cookies, hacker. Tracing IP...")
+
+@app.route('/setcookie/<method>')
+def set_cookie(method):
+    val = ""
+    if method.startswith("rot") and method[3:].isdigit():
+        n = int(method[3:])
+        if 1 <= n <= 26:
+            val = rot_n(target, n)
+    elif method == "hex":
+        val = encode_hex(target)
+    elif method == "base64":
+        val = encode_base64(target)
     else:
-        return render_template('index.html', message="Invalid cookie value! Check your cookies, hacker. Tracing IP...")
+        return "Invalid method", 400
+
+    resp = make_response(redirect("/"))
+    resp.set_cookie("admin", val)
+    return resp
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
